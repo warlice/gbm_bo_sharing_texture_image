@@ -296,19 +296,19 @@ int main(int argc, char **argv)
             }
         }else {
 	    int stride;
-	 sleep(1);
+		 sleep(1);
 		void * mapdata;
 		if (bo == NULL){
 			printf("import bo is null\n");
 		}
-	 void *maddr = gbm_bo_map(bo,0,0,640,480,GBM_BO_TRANSFER_READ,&stride,&mapdata);
-	 if (maddr == NULL) {
-		 perror("why\n");
-		 continue;
-	 }
-	printf("maddr %d\n",*(int*)maddr);
+		 void *maddr = gbm_bo_map(bo,0,0,640,480,GBM_BO_TRANSFER_READ,&stride,&mapdata);
+		 if (maddr == NULL) {
+			 perror("why\n");
+			 continue;
+		 }
+		printf("maddr %d\n",*(int*)maddr);
 
-	gbm_bo_unmap(bo,addr);
+		gbm_bo_unmap(bo,addr);
 	}
 
 
