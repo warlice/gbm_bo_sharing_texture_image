@@ -16,6 +16,11 @@
 #include "socket.h"
 #include "window.h"
 #include "render.h"
+#include <fcntl.h>
+#include  <drm/drm_fourcc.h>
+
+#include <gbm.h>
+#include <string.h>
 
 void parse_arguments(int argc, char **argv, int *is_server);
 int* create_data(size_t size);
@@ -45,6 +50,21 @@ int main(int argc, char **argv)
     const size_t TEXTURE_DATA_WIDTH = 256;
     const size_t TEXTURE_DATA_HEIGHT = TEXTURE_DATA_WIDTH;
     const size_t TEXTURE_DATA_SIZE = TEXTURE_DATA_WIDTH * TEXTURE_DATA_HEIGHT;
+
+    int fd= open("/dev/dri/renderD128", O_RDWR);
+
+    struct gbm_device* gbm = gbm_create_device(fd);
+    if (gbm == NULL) {
+        perror("create gbm device failed\n");
+        return -1;
+    }
+    printf("create gbm\n");
+    PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT =
+        (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
+    EGLDisplay gbm_display = eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_MESA, gbm, NULL);
+    eglInitialize(gbm_display, NULL, NULL);
+
+    struct gbm_bo * bo ;
     int* texture_data = create_data(TEXTURE_DATA_SIZE);
 
     // -----------------------------
@@ -65,10 +85,32 @@ int main(int argc, char **argv)
 
     // GL texture that will be shared
     GLuint texture;
+	PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES  = (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)eglGetProcAddress("glEGLImageTargetTexture2DOES");
+            
+	PFNEGLCREATEIMAGEKHRPROC eglCreateImageKHR  = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
+	if (eglCreateImageKHR == NULL){
+		printf("get proc failed\n");
+		return -1;
+	}
 
     // The next `if` block contains server code in the `true` branch and client code in the `false` branch. The `true` branch is always executed first and the `false` branch after it (in a different process). This is because the server loops at the end of the branch until it can send a message to the client and the client blocks at the start of the branch until it has a message to read. This way the whole `if` block from top to bottom represents the order of events as they happen.
     if (is_server)
     {
+	   bo  = gbm_bo_create(gbm,640,480,DRM_FORMAT_ARGB8888,GBM_BO_USE_RENDERING);
+	    if (bo == NULL) {
+		perror("create bo failed\n");
+		return -1;
+	    }
+        void *mapdata;
+        int stride;
+        void *addr = gbm_bo_map(bo,0,0,TEXTURE_DATA_WIDTH,TEXTURE_DATA_HEIGHT,GBM_BO_TRANSFER_READ_WRITE,&stride,&mapdata);
+        if (addr == NULL) {
+            perror("map bo failed\n");
+            return -1;
+        }
+        memcpy(addr,texture_data,sizeof(texture_data));
+        gbm_bo_unmap(bo,addr);
+
         // GL: Create and populate the texture
         glGenTextures(1, &texture);
         glBindTexture(GL_TEXTURE_2D, texture);
@@ -76,15 +118,30 @@ int main(int argc, char **argv)
         glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+         GLint format;
+        glGetTexLevelParameteriv(GL_TEXTURE_2D,0,GL_TEXTURE_INTERNAL_FORMAT,&format);
+        printf("format %x\n",format);
 
+	EGLint attribute_list = EGL_NONE; 
+       EGLImage image = eglCreateImageKHR(gbm_display,EGL_NO_CONTEXT,EGL_NATIVE_PIXMAP_KHR,bo,&attribute_list);
+       EGLint err = eglGetError();
+       if (err != EGL_SUCCESS) {
+	       printf("create image failed %x\n",err);
+	       return -1;
+       } 
         // EGL: Create EGL image from the GL texture
-        EGLImage image = eglCreateImage(egl_display,
+        /*EGLImage image = eglCreateImage(egl_display,
                                         egl_context,
                                         EGL_GL_TEXTURE_2D,
                                         (EGLClientBuffer)(uint64_t)texture,
                                         NULL);
         assert(image != EGL_NO_IMAGE);
-        
+	*/
+        int bofd = gbm_bo_get_fd(bo);
+        if (bofd == 0 ){
+            perror("get fd failed \n");
+            return -1;
+        }
         // The next line works around an issue in radeonsi driver (fixed in master at the time of writing). If you are
         // having problems with texture rendering until the first texture update you can uncomment this line
         // glFlush();
@@ -94,7 +151,7 @@ int main(int argc, char **argv)
         int texture_dmabuf_fd;
         struct texture_storage_metadata_t texture_storage_metadata;
 
-        int num_planes;
+        /*int num_planes;
         PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC eglExportDMABUFImageQueryMESA =
             (PFNEGLEXPORTDMABUFIMAGEQUERYMESAPROC)eglGetProcAddress("eglExportDMABUFImageQueryMESA");
         EGLBoolean queried = eglExportDMABUFImageQueryMESA(egl_display,
@@ -112,6 +169,12 @@ int main(int argc, char **argv)
                                                        &texture_storage_metadata.stride,
                                                        &texture_storage_metadata.offset);
         assert(exported);
+	*/
+        texture_dmabuf_fd = bofd;
+        texture_storage_metadata.offset = gbm_bo_get_offset(bo,0);
+        texture_storage_metadata.fourcc = gbm_bo_get_format(bo);
+        texture_storage_metadata.stride = gbm_bo_get_stride(bo);
+
 
         // Unix Domain Socket: Send file descriptor (texture_dmabuf_fd) and texture storage data (texture_storage_metadata)
         int sock = create_socket(SERVER_FILE);
@@ -130,26 +193,43 @@ int main(int argc, char **argv)
         int sock = create_socket(CLIENT_FILE);
         read_fd(sock, &texture_dmabuf_fd, &texture_storage_metadata, sizeof(texture_storage_metadata));
         close(sock);
-
+        struct gbm_import_fd_data data;
+        data.fd = texture_dmabuf_fd;
+        data.width  = TEXTURE_DATA_WIDTH;
+        data.height = TEXTURE_DATA_HEIGHT;
+        data.stride = texture_storage_metadata.stride;
+        data.format = texture_storage_metadata.fourcc;
+        bo = gbm_bo_import(gbm,GBM_BO_IMPORT_FD,&data,GBM_BO_USE_RENDERING);
+        if (bo == NULL) {
+            perror("import fd failed\n");
+            return -1;
+        }
+       EGLImage image = eglCreateImage(gbm_display,NULL,EGL_NATIVE_PIXMAP_KHR,bo,NULL);
+       EGLint err = eglGetError();
+       if (err != EGL_SUCCESS) {
+	       printf("create image failed %x\n",err);
+	       return -1;
+       } 
+	     
         // EGL (extension: EGL_EXT_image_dma_buf_import): Create EGL image from file descriptor (texture_dmabuf_fd) and storage
-        // data (texture_storage_metadata)
-        EGLAttrib const attribute_list[] = {
-            EGL_WIDTH, TEXTURE_DATA_WIDTH,
-            EGL_HEIGHT, TEXTURE_DATA_HEIGHT,
-            EGL_LINUX_DRM_FOURCC_EXT, texture_storage_metadata.fourcc,
-            EGL_DMA_BUF_PLANE0_FD_EXT, texture_dmabuf_fd,
-            EGL_DMA_BUF_PLANE0_OFFSET_EXT, texture_storage_metadata.offset,
-            EGL_DMA_BUF_PLANE0_PITCH_EXT, texture_storage_metadata.stride,
-            EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, (uint32_t)(texture_storage_metadata.modifiers & ((((uint64_t)1) << 33) - 1)),
-            EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, (uint32_t)((texture_storage_metadata.modifiers>>32) & ((((uint64_t)1) << 33) - 1)),
-            EGL_NONE};
-        EGLImage image = eglCreateImage(egl_display,
-                                        NULL,
-                                        EGL_LINUX_DMA_BUF_EXT,
-                                        (EGLClientBuffer)NULL,
-                                        attribute_list);
+        // // data (texture_storage_metadata)
+        // EGLAttrib const attribute_list[] = {
+        //     EGL_WIDTH, TEXTURE_DATA_WIDTH,
+        //     EGL_HEIGHT, TEXTURE_DATA_HEIGHT,
+        //     EGL_LINUX_DRM_FOURCC_EXT, texture_storage_metadata.fourcc,
+        //     EGL_DMA_BUF_PLANE0_FD_EXT, texture_dmabuf_fd,
+        //     EGL_DMA_BUF_PLANE0_OFFSET_EXT, texture_storage_metadata.offset,
+        //     EGL_DMA_BUF_PLANE0_PITCH_EXT, texture_storage_metadata.stride,
+        //     EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT, (uint32_t)(texture_storage_metadata.modifiers & ((((uint64_t)1) << 33) - 1)),
+        //     EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT, (uint32_t)((texture_storage_metadata.modifiers>>32) & ((((uint64_t)1) << 33) - 1)),
+        //     EGL_NONE};
+        // EGLImage image = eglCreateImage(egl_display,
+        //                                 NULL,
+        //                                 EGL_LINUX_DMA_BUF_EXT,
+        //                                 (EGLClientBuffer)NULL,
+        //                                 attribute_list);
         assert(image != EGL_NO_IMAGE);
-        close(texture_dmabuf_fd);
+        //close(texture_dmabuf_fd);
 
         // GLES (extension: GL_OES_EGL_image_external): Create GL texture from EGL image
         glGenTextures(1, &texture);
@@ -157,19 +237,35 @@ int main(int argc, char **argv)
         glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    }
+	gl_draw_scene(texture);
+	eglSwapBuffers(egl_display, egl_surface);
+}
 
     // -----------------------------
     // --- Texture sharing end ---
     // -----------------------------
 
+	void *addr ;
+	EGLImage serverImage;
     time_t last_time = time(NULL);
+    /*if (0){
+	    int stride;
+	void * mapdata;
+	 addr = gbm_bo_map(bo,0,0,640,480,GBM_BO_TRANSFER_WRITE,&stride,&mapdata);
+       serverImage = eglCreateImage(gbm_display,NULL,EGL_NATIVE_PIXMAP_KHR,bo,NULL);
+       EGLint err = eglGetError();
+       if (err != EGL_SUCCESS) {
+	       printf("create image failed %x\n",err);
+	       return -1;
+       } 
+    }
+    */
     while (1)
     {
         // Draw scene (uses shared texture)
-        gl_draw_scene(texture);
-        eglSwapBuffers(egl_display, egl_surface);
 
+	gl_draw_scene(texture);
+	eglSwapBuffers(egl_display, egl_surface);
         // Update texture data each second to see that the client didn't just copy the texture and is indeed referencing
         // the same texture data.
         if (is_server)
@@ -179,16 +275,49 @@ int main(int argc, char **argv)
             {
                 last_time = cur_time;
                 rotate_data(texture_data, TEXTURE_DATA_SIZE);
+		glBindTexture(GL_TEXTURE_2D,0);
                 glBindTexture(GL_TEXTURE_2D, texture);
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
+	    int stride;
+	void * mapdata;
+	 addr = gbm_bo_map(bo,0,0,640,480,GBM_BO_TRANSFER_WRITE,&stride,&mapdata);
+		memcpy(addr,texture_data,640*480*8);
+		printf("addr %d\n",*(int*)addr);
+       serverImage = eglCreateImage(gbm_display,NULL,EGL_NATIVE_PIXMAP_KHR,bo,NULL);
+       EGLint err = eglGetError();
+       if (err != EGL_SUCCESS) {
+	       printf("create image failed %x\n",err);
+	       return -1;
+       }
+                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, addr);
+        	//glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, serverImage);
+		
+       gbm_bo_unmap(bo,addr);
+
             }
-        }
+        }else {
+	    int stride;
+	 sleep(1);
+		void * mapdata;
+		if (bo == NULL){
+			printf("import bo is null\n");
+		}
+	 void *maddr = gbm_bo_map(bo,0,0,640,480,GBM_BO_TRANSFER_READ,&stride,&mapdata);
+	 if (maddr == NULL) {
+		 perror("why\n");
+		 continue;
+	 }
+	printf("maddr %d\n",*(int*)maddr);
+
+	gbm_bo_unmap(bo,addr);
+	}
+
 
         // Check for errors
         assert(glGetError() == GL_NO_ERROR);
         assert(eglGetError() == EGL_SUCCESS);
     }
 
+    gbm_bo_unmap(bo,addr);
     return 0;
 }
 
