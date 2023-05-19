@@ -96,7 +96,7 @@ int main(int argc, char **argv)
     // The next `if` block contains server code in the `true` branch and client code in the `false` branch. The `true` branch is always executed first and the `false` branch after it (in a different process). This is because the server loops at the end of the branch until it can send a message to the client and the client blocks at the start of the branch until it has a message to read. This way the whole `if` block from top to bottom represents the order of events as they happen.
     if (is_server)
     {
-	   bo  = gbm_bo_create(gbm,640,480,DRM_FORMAT_ARGB8888,GBM_BO_USE_RENDERING);
+	   bo  = gbm_bo_create(gbm,TEXTURE_DATA_WIDTH,TEXTURE_DATA_HEIGHT,DRM_FORMAT_ARGB8888,GBM_BO_USE_RENDERING);
 	    if (bo == NULL) {
 		perror("create bo failed\n");
 		return -1;
@@ -115,7 +115,7 @@ int main(int argc, char **argv)
         glGenTextures(1, &texture);
         glBindTexture(GL_TEXTURE_2D, texture);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
+        //glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, texture_data);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
          GLint format;
@@ -248,18 +248,24 @@ int main(int argc, char **argv)
 	void *addr ;
 	EGLImage serverImage;
     time_t last_time = time(NULL);
-    /*if (0){
+    if (0){
 	    int stride;
 	void * mapdata;
-	 addr = gbm_bo_map(bo,0,0,640,480,GBM_BO_TRANSFER_WRITE,&stride,&mapdata);
-       serverImage = eglCreateImage(gbm_display,NULL,EGL_NATIVE_PIXMAP_KHR,bo,NULL);
+	 addr = gbm_bo_map(bo,0,0,TEXTURE_DATA_WIDTH,TEXTURE_DATA_HEIGHT,GBM_BO_TRANSFER_WRITE,&stride,&mapdata);
+    /*   serverImage = eglCreateImage(gbm_display,NULL,EGL_NATIVE_PIXMAP_KHR,bo,NULL);
        EGLint err = eglGetError();
        if (err != EGL_SUCCESS) {
 	       printf("create image failed %x\n",err);
 	       return -1;
        } 
+       */
     }
-    */
+	       serverImage = eglCreateImage(gbm_display,NULL,EGL_NATIVE_PIXMAP_KHR,bo,NULL);
+	       EGLint err = eglGetError();
+	       if (err != EGL_SUCCESS) {
+		       printf("create image failed %x\n",err);
+		       return -1;
+	       }
     while (1)
     {
         // Draw scene (uses shared texture)
@@ -277,21 +283,30 @@ int main(int argc, char **argv)
                 rotate_data(texture_data, TEXTURE_DATA_SIZE);
 		glBindTexture(GL_TEXTURE_2D,0);
                 glBindTexture(GL_TEXTURE_2D, texture);
-	    int stride;
-	void * mapdata;
-	 addr = gbm_bo_map(bo,0,0,640,480,GBM_BO_TRANSFER_WRITE,&stride,&mapdata);
-		memcpy(addr,texture_data,640*480*8);
+	        int stride;
+		void * mapdata;
+		addr = gbm_bo_map(bo,0,0,TEXTURE_DATA_WIDTH,TEXTURE_DATA_HEIGHT,GBM_BO_TRANSFER_WRITE,&stride,&mapdata);
+		memcpy(addr,texture_data,TEXTURE_DATA_WIDTH*TEXTURE_DATA_HEIGHT*8);
 		printf("addr %d\n",*(int*)addr);
-       serverImage = eglCreateImage(gbm_display,NULL,EGL_NATIVE_PIXMAP_KHR,bo,NULL);
-       EGLint err = eglGetError();
-       if (err != EGL_SUCCESS) {
-	       printf("create image failed %x\n",err);
-	       return -1;
-       }
-                glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, addr);
-        	//glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, serverImage);
+       		gbm_bo_unmap(bo,addr);
+                //glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, addr);
+        	glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, serverImage);
+		GLuint binding_fbo;
+		GLuint fbo;
+		glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING,(GLint *)&binding_fbo);
+		glGenFramebuffers(1,&fbo);
+		glBindFramebuffer(GL_READ_FRAMEBUFFER,fbo);
+		unsigned char *pixels = malloc(sizeof(char) * TEXTURE_DATA_WIDTH*TEXTURE_DATA_HEIGHT);
+		gl_draw_scene(texture);
+		eglSwapBuffers(egl_display, egl_surface);
 		
-       gbm_bo_unmap(bo,addr);
+
+		memset(pixels,0,sizeof(char) *TEXTURE_DATA_SIZE);
+		glReadPixels(0,0,TEXTURE_DATA_WIDTH,TEXTURE_DATA_HEIGHT,GL_RGBA,GL_UNSIGNED_BYTE,pixels);	
+		printf("ge %d\n",glGetError());
+		glBindFramebuffer(GL_READ_FRAMEBUFFER,binding_fbo);
+		glDeleteFramebuffers(1,&fbo);
+		printf("pixels %d\n",*(int*)pixels);
 
             }
         }else {
@@ -301,12 +316,12 @@ int main(int argc, char **argv)
 		if (bo == NULL){
 			printf("import bo is null\n");
 		}
-		 void *maddr = gbm_bo_map(bo,0,0,640,480,GBM_BO_TRANSFER_READ,&stride,&mapdata);
+		 void *maddr = gbm_bo_map(bo,0,0,TEXTURE_DATA_WIDTH,TEXTURE_DATA_HEIGHT,GBM_BO_TRANSFER_READ,&stride,&mapdata);
 		 if (maddr == NULL) {
 			 perror("why\n");
 			 continue;
 		 }
-		printf("maddr %d\n",*(int*)maddr);
+		printf("maddr client %d\n",*(int*)maddr);
 
 		gbm_bo_unmap(bo,addr);
 	}
