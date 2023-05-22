@@ -16,7 +16,13 @@ void initialize_egl(Display *x11_display, Window x11_window, EGLDisplay *egl_dis
     //printf(" %x kjkjkj \n", eglGetError());
 
     // get an EGL display connection
-    EGLDisplay display = eglGetDisplay(x11_display);
+    PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT =
+        (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
+    EGLDisplay display = eglGetPlatformDisplayEXT(EGL_PLATFORM_X11_EXT, x11_display, NULL);
+    if (display == NULL) {
+	    printf("create x11 ext display failed\n");
+	    return ;
+    }
 
     // initialize the EGL display connection
     eglInitialize(display, NULL, NULL);
