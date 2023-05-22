@@ -50,7 +50,7 @@ void initialize_egl(Display *x11_display, Window x11_window, EGLDisplay *egl_dis
 void gl_setup_scene()
 {
     // Shader source that draws a textures quad
-    const char *vertex_shader_source = "#version 330 core\n"
+  /*  const char *vertex_shader_source = "#version 330 core\n"
                                        "layout (location = 0) in vec3 aPos;\n"
                                        "layout (location = 1) in vec2 aTexCoords;\n"
 
@@ -72,6 +72,41 @@ void gl_setup_scene()
                                          "{\n"
                                          "   FragColor = texture(Texture1, TexCoords);\n"
                                          "}\0";
+					 */
+
+     const char *vertex_shader_source = "   precision mediump float;"
+      "\n "
+      "\n "
+      "\n // Model-view-projection transformation matrix"
+      "\n //uniform mat4 mvp_matrix;"
+      "\n "
+      "\n // Incoming"
+      "\n attribute vec3 a_position;      // vertex position in 2d Model Space"
+      "\n attribute vec3 a_color;         // color of the rectangular segment this vertex is part of"
+      "\n attribute vec2 aTexCoords;"
+      "\n "
+      "\n // Outgoing interpolated values for the fragment shader"
+      "\n varying vec3 color;"
+      "\n varying vec2 TexCoords;"
+      "\n "
+      "\n void main() {"
+      "\n   gl_Position = vec4(a_position.x, a_position.y, a_position.z,1.0);"
+      "\n   TexCoords = aTexCoords;"
+      "\n   color = a_color;"
+      "\n }\0";
+   const char *fragment_shader_source = "   precision mediump float;"
+      "\n "
+      "\n varying vec2 TexCoords;"
+      "\n varying vec4 FragColor;"
+      "\n uniform sampler2D Texture1;"
+
+      "\n varying vec3 color;"
+      "\n "
+      "\n void main() {"
+      "\n   gl_FragColor = texture2D(Texture1,TexCoords);"
+      "\n   //gl_FragColor = vec4(color, 1.0);"
+      "\n }\0";
+ 
 
     // vertex shader
     int vertex_shader = glCreateShader(GL_VERTEX_SHADER);

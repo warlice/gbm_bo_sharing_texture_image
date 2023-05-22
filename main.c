@@ -201,13 +201,6 @@ int main(int argc, char **argv)
        } 
         assert(image != EGL_NO_IMAGE);
 
-        // GLES (extension: GL_OES_EGL_image_external): Create GL texture from EGL image
-        glGenTextures(1, &texture);
-        glBindTexture(GL_TEXTURE_2D, texture);
-        glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
 
 	void *imageaddr;
 	time_t last_time = time(NULL);
@@ -249,10 +242,11 @@ int main(int argc, char **argv)
 	printf("imaged bo %x\n",*(int*)imageaddr);
 
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-	//glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, addr);
-	glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
-	glGetTexImage(GL_TEXTURE_2D,0,GL_RGB,GL_UNSIGNED_BYTE,buffer);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, addr);
+	//glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
+/*	glGetTexImage(GL_TEXTURE_2D,0,GL_RGB,GL_UNSIGNED_BYTE,buffer);
 	printf("image %x\n",*(int*)buffer);
+	*/
 	gbm_bo_unmap(imagebo,imageaddr);
 	gbm_bo_unmap(importbo,addr);
     }
