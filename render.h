@@ -10,7 +10,7 @@
 void initialize_egl(Display *x11_display, Window x11_window, EGLDisplay *egl_display, EGLContext *egl_context, EGLSurface *egl_surface)
 {
     // Set OpenGL rendering API
-    eglBindAPI(EGL_OPENGL_API);
+    eglBindAPI(EGL_OPENGL_ES_API);
 
     // get an EGL display connection
     EGLDisplay display = eglGetDisplay(x11_display);
