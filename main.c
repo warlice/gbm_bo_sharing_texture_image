@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <time.h>
 #include <math.h>
+#include <epoxy/egl.h>
 
 #include <X11/Xlib.h>
 #define GL_GLEXT_PROTOTYPES
@@ -208,12 +209,13 @@ int main(int argc, char **argv)
 	/* import the image to print data of the image*/
 	struct gbm_bo *imagebo = gbm_bo_import(gbm,GBM_BO_IMPORT_EGL_IMAGE,image,GBM_BO_USE_RENDERING);
 	unsigned char *buffer = (unsigned char*)malloc(TEXTURE_DATA_SIZE*4);
+	glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
     while (1)
     {
         // Draw scene (uses shared texture)
-
 	gl_draw_scene(texture);
 	eglSwapBuffers(egl_display, egl_surface);
+
         // Update texture data each second to see that the client didn't just copy the texture and is indeed referencing
         // the same texture data.
     time_t cur_time = time(NULL);
@@ -223,6 +225,7 @@ int main(int argc, char **argv)
 	rotate_data(texture_data, TEXTURE_DATA_SIZE);
 	glBindTexture(GL_TEXTURE_2D,0);
 	glBindTexture(GL_TEXTURE_2D, texture);
+	printf("%x while \n", glGetError());
 	int stride;
 	void * mapdata;
 	void *addr = gbm_bo_map(importbo,0,0,TEXTURE_DATA_WIDTH,TEXTURE_DATA_HEIGHT,GBM_BO_TRANSFER_WRITE,&stride,&mapdata);
@@ -241,9 +244,12 @@ int main(int argc, char **argv)
 	void *imageaddr = gbm_bo_map(imagebo,0,0,TEXTURE_DATA_WIDTH,TEXTURE_DATA_HEIGHT,GBM_BO_TRANSFER_WRITE,&stride,&mapdata);
 	printf("imaged bo %x\n",*(int*)imageaddr);
 
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, addr);
-	//glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
+        //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+//	printf("%x tex 2d while \n", glGetError());
+//	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, addr);
+//	printf("%x sub imagel \n", glGetError());
+	glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
+	printf("%x oes \n", glGetError());
 /*	glGetTexImage(GL_TEXTURE_2D,0,GL_RGB,GL_UNSIGNED_BYTE,buffer);
 	printf("image %x\n",*(int*)buffer);
 	*/

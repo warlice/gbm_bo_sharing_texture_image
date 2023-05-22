@@ -2,6 +2,7 @@
 
 #include <stddef.h>
 
+#include <epoxy/egl.h>
 #define GL_GLEXT_PROTOTYPES
 #include <GL/gl.h>
 #define EGL_EGLEXT_PROTOTYPES
@@ -9,8 +10,10 @@
 
 void initialize_egl(Display *x11_display, Window x11_window, EGLDisplay *egl_display, EGLContext *egl_context, EGLSurface *egl_surface)
 {
+   printf("EGL Client APIs: %s", eglQueryString(egl_display, EGL_CLIENT_APIS));
     // Set OpenGL rendering API
     eglBindAPI(EGL_OPENGL_ES_API);
+    //printf(" %x kjkjkj \n", eglGetError());
 
     // get an EGL display connection
     EGLDisplay display = eglGetDisplay(x11_display);
@@ -30,8 +33,8 @@ void initialize_egl(Display *x11_display, Window x11_window, EGLDisplay *egl_dis
 
     // create an EGL rendering context
     EGLint const attrib_list[] = {
-        EGL_CONTEXT_MAJOR_VERSION, 3,
-        EGL_CONTEXT_MINOR_VERSION, 3,
+        EGL_CONTEXT_MAJOR_VERSION, 2,
+        EGL_CONTEXT_MINOR_VERSION, 0,
         EGL_NONE};
     EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, attrib_list);
 
@@ -160,11 +163,13 @@ void gl_setup_scene()
 
     // Prebind needed stuff for drawing
     glUseProgram(shader_program);
+    printf("%x use program \n",eglGetError());
     glBindVertexArray(VAO);
 }
 
 void gl_draw_scene(GLuint texture)
 {
+	GLint err ;
     // clear
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -172,6 +177,18 @@ void gl_draw_scene(GLuint texture)
     // draw quad
     // VAO and shader program are already bound from the call to gl_setup_scene
     glActiveTexture(GL_TEXTURE0);
+    err = glGetError();
+    if (err != GL_NO_ERROR) {
+	printf("%x active \n", glGetError());
+    }
     glBindTexture(GL_TEXTURE_2D, texture);
+    err = glGetError();
+    if (err != GL_NO_ERROR) {
+	printf("%x bind\n", glGetError());
+    }
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+    err = glGetError();
+    if (err != GL_NO_ERROR) {
+	printf("%x draw\n", glGetError());
+    }
 }
