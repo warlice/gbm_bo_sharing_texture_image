@@ -13,7 +13,7 @@ void initialize_egl(Display *x11_display, Window x11_window, EGLDisplay *egl_dis
    printf("EGL Client APIs: %s", eglQueryString(egl_display, EGL_CLIENT_APIS));
     // Set OpenGL rendering API
     eglBindAPI(EGL_OPENGL_ES_API);
-    //printf(" %x kjkjkj \n", eglGetError());
+    //printf(" %x bind api \n", eglGetError());
 
     // get an EGL display connection
     PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT =

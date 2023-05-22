@@ -128,7 +128,7 @@ int main(int argc, char **argv)
 
     // GL texture that will be shared
 	GLuint texture;
-	//PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES  = (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)eglGetProcAddress("glEGLImageTargetTexture2DOES");
+	PFNGLEGLIMAGETARGETTEXTURE2DOESPROC glEGLImageTargetTexture2DOES  = (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC)eglGetProcAddress("glEGLImageTargetTexture2DOES");
             
 	PFNEGLCREATEIMAGEKHRPROC eglCreateImageKHR  = (PFNEGLCREATEIMAGEKHRPROC)eglGetProcAddress("eglCreateImageKHR");
 	if (eglCreateImageKHR == NULL){
@@ -175,6 +175,7 @@ int main(int argc, char **argv)
         texture_storage_metadata.offset = gbm_bo_get_offset(bo,0);
         texture_storage_metadata.fourcc = gbm_bo_get_format(bo);
         texture_storage_metadata.stride = gbm_bo_get_stride(bo);
+	texture_storage_metadata.modifiers = gbm_bo_get_modifier(bo);
 
 	//get a new bo by importing the fd returned from gbm_bo_get
         struct gbm_import_fd_data data;
@@ -191,10 +192,17 @@ int main(int argc, char **argv)
 	//create image from the imported bo in the last step
 	const EGLint imageAttributes[] = 
 	{
-		EGL_IMAGE_PRESERVED_KHR,EGL_TRUE,
+		EGL_WIDTH, TEXTURE_DATA_WIDTH,
+		EGL_HEIGHT ,TEXTURE_DATA_HEIGHT,
+		EGL_LINUX_DRM_FOURCC_EXT, texture_storage_metadata.fourcc,
+		EGL_DMA_BUF_PLANE0_FD_EXT, texture_dmabuf_fd,
+		EGL_DMA_BUF_PLANE0_OFFSET_EXT, texture_storage_metadata.offset,
+		EGL_DMA_BUF_PLANE0_PITCH_EXT, texture_storage_metadata.stride,
+		EGL_DMA_BUF_PLANE0_MODIFIER_LO_EXT,(uint32_t)(texture_storage_metadata.modifiers & (((( uint64_t)1) << 33) -1)),
+		EGL_DMA_BUF_PLANE0_MODIFIER_HI_EXT,(uint32_t)((texture_storage_metadata.modifiers >> 32) & (((( uint64_t)1) << 33) -1)),
 		EGL_NONE
 	};
-       EGLImage image = eglCreateImageKHR(gbm_display,NULL,EGL_NATIVE_PIXMAP_KHR,importbo,imageAttributes);
+       EGLImage image = eglCreateImageKHR(egl_display,NULL,EGL_LINUX_DMA_BUF_EXT,NULL,imageAttributes);
        EGLint err = eglGetError();
        if (err != EGL_SUCCESS) {
 	       printf("create image failed %x\n",err);
@@ -209,7 +217,7 @@ int main(int argc, char **argv)
 	/* import the image to print data of the image*/
 	struct gbm_bo *imagebo = gbm_bo_import(gbm,GBM_BO_IMPORT_EGL_IMAGE,image,GBM_BO_USE_RENDERING);
 	unsigned char *buffer = (unsigned char*)malloc(TEXTURE_DATA_SIZE*4);
-	glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
+	//glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
     while (1)
     {
         // Draw scene (uses shared texture)
@@ -244,12 +252,12 @@ int main(int argc, char **argv)
 	void *imageaddr = gbm_bo_map(imagebo,0,0,TEXTURE_DATA_WIDTH,TEXTURE_DATA_HEIGHT,GBM_BO_TRANSFER_WRITE,&stride,&mapdata);
 	printf("imaged bo %x\n",*(int*)imageaddr);
 
-        //glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-//	printf("%x tex 2d while \n", glGetError());
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	printf("%x tex 2d while \n", glGetError());
 //	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, TEXTURE_DATA_WIDTH, TEXTURE_DATA_HEIGHT, GL_RGBA, GL_UNSIGNED_BYTE, addr);
 //	printf("%x sub imagel \n", glGetError());
 	glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, image);
-	printf("%x oes \n", glGetError());
+	printf("%x gl egl image target texture 2d oes \n", glGetError());
 /*	glGetTexImage(GL_TEXTURE_2D,0,GL_RGB,GL_UNSIGNED_BYTE,buffer);
 	printf("image %x\n",*(int*)buffer);
 	*/
