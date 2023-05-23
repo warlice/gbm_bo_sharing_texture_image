@@ -112,8 +112,8 @@ int main(int argc, char **argv)
     printf("create gbm\n");
     PFNEGLGETPLATFORMDISPLAYEXTPROC eglGetPlatformDisplayEXT =
         (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
-    EGLDisplay gbm_display = eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_MESA, gbm, NULL);
-    eglInitialize(gbm_display, NULL, NULL);
+    //EGLDisplay gbm_display = eglGetPlatformDisplayEXT(EGL_PLATFORM_GBM_MESA, gbm, NULL);
+    //eglInitialize(gbm_display, NULL, NULL);
 
     struct gbm_bo * bo ;
     int* texture_data = create_data(TEXTURE_DATA_SIZE);
