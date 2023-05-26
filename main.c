@@ -102,7 +102,7 @@ int main(int argc, char **argv)
 	const size_t TEXTURE_DATA_HEIGHT = TEXTURE_DATA_WIDTH;
 	const size_t TEXTURE_DATA_SIZE = TEXTURE_DATA_WIDTH * TEXTURE_DATA_HEIGHT;
 
-	int fd= open("/dev/dri/renderD128", O_RDWR);
+	int fd= open("/dev/dri/card0", O_RDWR);
 
 	struct gbm_device* gbm = gbm_create_device(fd);
 	if (gbm == NULL) {
